@@ -6,8 +6,8 @@ Sub CheckAllXlsxFiles_MultiPairs()
     Dim filePath As Variant
     Dim wsOut As Worksheet
     Dim nextRow As Long
-    
-    ' 定?要?比的?元格?（左?和右?一一??）
+
+    ' 定义要对比的单元格对（左边和右边一一对应）
     Dim cellPairs As Variant
     cellPairs = Array( _
         Array("AW24", "BA25", "B22", "月曜日"), _
@@ -16,119 +16,167 @@ Sub CheckAllXlsxFiles_MultiPairs()
         Array("AW54", "BA55", "B52", "木曜日"), _
         Array("AW64", "BA65", "B62", "金曜日"), _
         Array("AW74", "BA75", "B72", "土曜日"), _
-        Array("AW84", "BA85", "B82", "日曜日"))  ' ← 可根据需要修改
-    
-    ' ======================
-    
+        Array("AW84", "BA85", "B82", "日曜日"))
+
     Set wsOut = ThisWorkbook.Sheets(1)
-    ' === 新增：清空上次?果 ===
     wsOut.Range("A4:D200").ClearContents
-    'wsOut.Range("A3:D3").Value = Array("ファイル名", "結果", "セル", "値")
     nextRow = 4
-    
-    ' ==== 用??置区域 ====
+
     folderPath = wsOut.Range("A2").Value
-    
+
     Set fileList = New Collection
-    Call GetAllXlsxFiles(folderPath, fileList)
-    
-    Dim wb As Workbook
+    GetAllXlsxFiles folderPath, fileList
+
+    If fileList.Count = 0 Then
+        MsgBox "未找到xlsx文件", vbExclamation
+        Exit Sub
+    End If
+
+    Dim wb As Workbook, ws As Worksheet
     Dim v1 As Variant, v2 As Variant, v3 As Variant, v4 As Variant
-    Dim i As Integer, minuteForCompare As Integer
+    Dim i As Long, minuteForCompare As Long
     Dim allOK As Boolean, isMinuteChange As Boolean
     Dim diffInfo As String
-    
+    Dim oldCalc As XlCalculation
+    Dim oldSecurity As MsoAutomationSecurity
+    Dim resultData() As Variant
+    Dim r As Long
+
+    ReDim resultData(1 To fileList.Count, 1 To 3)
+
     Application.ScreenUpdating = False
     Application.EnableEvents = False
     Application.DisplayAlerts = False
-    
+    oldCalc = Application.Calculation
+    Application.Calculation = xlCalculationManual
+    oldSecurity = Application.AutomationSecurity
+    Application.AutomationSecurity = msoAutomationSecurityForceDisable
+
+    On Error GoTo SafeExit
+
+    r = 1
     For Each filePath In fileList
+        Set wb = Nothing
         On Error Resume Next
-        Set wb = Workbooks.Open(filePath, ReadOnly:=True, _
-                                UpdateLinks:=False, AddToMru:=False)
-        wb.Windows(1).Visible = False
-        On Error GoTo 0
-        
+        Set wb = Workbooks.Open(Filename:=CStr(filePath), ReadOnly:=True, _
+                                UpdateLinks:=0, IgnoreReadOnlyRecommended:=True, _
+                                AddToMru:=False, Notify:=False)
+        On Error GoTo SafeExit
+
         If Not wb Is Nothing Then
+            Set ws = wb.Sheets(1)
             allOK = True
-            diffInfo = ""
+            diffInfo = vbNullString
             minuteForCompare = 0
             isMinuteChange = False
-            
-            With wb.Sheets(1)
-                For i = LBound(cellPairs) To UBound(cellPairs)
-                    v1 = .Range(cellPairs(i)(0)).Value
-                    v2 = Round(.Range(cellPairs(i)(1)).Value * 24 * 60, 0)
-                    v3 = .Range(cellPairs(i)(2)).Value
-                    v4 = cellPairs(i)(3)
-                    
-                    If IsEmpty(v1) Or v1 = 0 Then v1 = 0
-                    If IsEmpty(v2) Or v2 = 0 Then v2 = 0
-                    
-                    If v1 <> v2 Then
-                        allOK = False
-                        diffInfo = diffInfo & cellPairs(i)(0) & "=" & v1 & "；" & _
-                                               cellPairs(i)(1) & "=" & v2 & "；"
-                    End If
-                    
-                    If i < 5 And v1 = 0 And IsEmpty(v3) Then
-                        allOK = False
-                        diffInfo = diffInfo & v4 & "が休みの場合、" & cellPairs(i)(2) & _
-                                               "に「休み or 祝日」を入れてください。"
-                        Exit For
-                    End If
-                    
-                    If minuteForCompare <> 0 And v2 <> 0 And minuteForCompare <> v2 Then
-                        isMinuteChange = True
-                    End If
-                    
-                    If v2 <> 0 Then
-                        minuteForCompare = v2
-                    End If
-                    
-                Next i
-            End With
-            
-            wsOut.Cells(nextRow, 1).Value = filePath
+
+            For i = LBound(cellPairs) To UBound(cellPairs)
+                v1 = ToLongOrZero(ws.Range(cellPairs(i)(0)).Value2)
+                v2 = Round(ToDoubleOrZero(ws.Range(cellPairs(i)(1)).Value2) * 24 * 60, 0)
+                v3 = ws.Range(cellPairs(i)(2)).Value2
+                v4 = cellPairs(i)(3)
+
+                If v1 <> v2 Then
+                    allOK = False
+                    diffInfo = diffInfo & cellPairs(i)(0) & "=" & v1 & "；" & _
+                                           cellPairs(i)(1) & "=" & v2 & "；"
+                End If
+
+                If i < 5 And v1 = 0 And IsEmpty(v3) Then
+                    allOK = False
+                    diffInfo = diffInfo & v4 & "が休みの場合、" & cellPairs(i)(2) & _
+                                           "に「休み or 祝日」を入れてください。"
+                    Exit For
+                End If
+
+                If minuteForCompare <> 0 And v2 <> 0 And minuteForCompare <> v2 Then
+                    isMinuteChange = True
+                End If
+
+                If v2 <> 0 Then
+                    minuteForCompare = v2
+                End If
+            Next i
+
+            resultData(r, 1) = filePath
             If allOK Then
-                wsOut.Cells(nextRow, 2).Value = "OK"
                 If Not isMinuteChange Then
-                    wsOut.Cells(nextRow, 2).Value = "Warning"
-                    wsOut.Cells(nextRow, 3).Value = "作業時間は毎日同じです。事実ですか。"
+                    resultData(r, 2) = "Warning"
+                    resultData(r, 3) = "作業時間は毎日同じです。事実ですか。"
+                Else
+                    resultData(r, 2) = "OK"
+                    resultData(r, 3) = vbNullString
                 End If
             Else
-                wsOut.Cells(nextRow, 2).Value = "NG"
-                wsOut.Cells(nextRow, 3).Value = diffInfo
+                resultData(r, 2) = "NG"
+                resultData(r, 3) = diffInfo
             End If
-            
-            nextRow = nextRow + 1
+
+            r = r + 1
             wb.Close SaveChanges:=False
         End If
     Next filePath
-    
+
+    If r > 1 Then
+        wsOut.Cells(nextRow, 1).Resize(r - 1, 3).Value = resultData
+    End If
+
+SafeExit:
+    If Not wb Is Nothing Then
+        On Error Resume Next
+        wb.Close SaveChanges:=False
+        On Error GoTo 0
+    End If
+
+    Application.AutomationSecurity = oldSecurity
+    Application.Calculation = oldCalc
     Application.DisplayAlerts = True
     Application.EnableEvents = True
     Application.ScreenUpdating = True
-    
-    MsgBox "チェック完了", vbInformation
+
+    If Err.Number <> 0 Then
+        MsgBox "执行异常: " & Err.Description, vbExclamation
+    Else
+        MsgBox "チェック完了", vbInformation
+    End If
 End Sub
 
+Private Function ToLongOrZero(ByVal v As Variant) As Long
+    If IsError(v) Or IsEmpty(v) Or LenB(vbNullString & v) = 0 Or v = 0 Then
+        ToLongOrZero = 0
+    Else
+        ToLongOrZero = CLng(v)
+    End If
+End Function
 
-'=== ???取所有xlsx文件 ===
+Private Function ToDoubleOrZero(ByVal v As Variant) As Double
+    If IsError(v) Or IsEmpty(v) Or LenB(vbNullString & v) = 0 Or v = 0 Then
+        ToDoubleOrZero = 0
+    Else
+        ToDoubleOrZero = CDbl(v)
+    End If
+End Function
+
+'=== 递归取所有xlsx文件 ===
 Sub GetAllXlsxFiles(ByVal folderPath As String, ByRef fileList As Collection)
-    Dim fso As Object, folder As Object, subFolder As Object, file As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    Set folder = fso.GetFolder(folderPath)
-    
-    For Each file In folder.Files
-        If LCase(fso.GetExtensionName(file.Name)) = "xlsx" Then
-            fileList.Add file.Path
+    Dim fileName As String
+    Dim subFolder As String
+
+    If Right$(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+
+    fileName = Dir$(folderPath & "*.xlsx", vbNormal)
+    Do While LenB(fileName) > 0
+        fileList.Add folderPath & fileName
+        fileName = Dir$()
+    Loop
+
+    subFolder = Dir$(folderPath & "*", vbDirectory)
+    Do While LenB(subFolder) > 0
+        If subFolder <> "." And subFolder <> ".." Then
+            If (GetAttr(folderPath & subFolder) And vbDirectory) = vbDirectory Then
+                GetAllXlsxFiles folderPath & subFolder, fileList
+            End If
         End If
-    Next file
-    
-    For Each subFolder In folder.SubFolders
-        Call GetAllXlsxFiles(subFolder.Path, fileList)
-    Next subFolder
+        subFolder = Dir$()
+    Loop
 End Sub
-
-
