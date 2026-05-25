@@ -190,7 +190,7 @@ Private Sub EvaluateFile(ByVal filePath As String, ByVal cellPairs As Variant, B
 End Sub
 
 Private Function CsvEscape(ByVal s As String) As String
-    CsvEscape = """" & Replace(s, """", """"") & """"
+    CsvEscape = """" & Replace(s, """", """") & """"
 End Function
 
 Private Function ToLongOrZero(ByVal v As Variant) As Long
