@@ -122,7 +122,7 @@ Public Sub CheckXlsxFiles_FromList(ByVal listFilePath As String, ByVal outputCsv
     ts.Close
 End Sub
 
-Private Sub EvaluateFile(ByVal filePath As String, ByVal cellPairs As Variant, ByRef resultStatus As String, ByRef resultMessage As String)
+Private Sub EvaluateFile(ByVal filePath As String, ByVal cellPairs As Variant, ByRef resultStatus As Variant, ByRef resultMessage As Variant)
     Dim wb As Workbook, ws As Worksheet
     Dim v1 As Variant, v2 As Variant, v3 As Variant, v4 As Variant
     Dim i As Long, minuteForCompare As Long
