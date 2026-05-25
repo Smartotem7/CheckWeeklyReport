@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory=$true)][string]$WorkbookPath,
   [Parameter(Mandatory=$true)][string]$TargetFolder,
   [int]$Workers = 2,
-  [string]$MacroName = "CheckXlsxFiles_FromList"
+  [string]$MacroName = "CheckXlsxFiles_FromList",
+  [string]$ResultCsvPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,7 +81,18 @@ foreach ($file in $outFiles) {
   }
 }
 
-$resultCsv = Join-Path $base "merged_result.csv"
+$resultCsv = if ([string]::IsNullOrWhiteSpace($ResultCsvPath)) {
+  Join-Path $base "merged_result.csv"
+}
+else {
+  $ResultCsvPath
+}
+
+$resultCsvDir = Split-Path -Path $resultCsv -Parent
+if (![string]::IsNullOrWhiteSpace($resultCsvDir) -and !(Test-Path $resultCsvDir)) {
+  New-Item -ItemType Directory -Path $resultCsvDir -Force | Out-Null
+}
+
 $rows | Export-Csv -Path $resultCsv -NoTypeInformation -Encoding UTF8
 
 Write-Host "Done."
