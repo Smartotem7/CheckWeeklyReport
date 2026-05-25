@@ -78,11 +78,11 @@ End Sub
 Public Sub CheckXlsxFiles_FromList(ByVal listFilePath As String, ByVal outputCsvPath As String)
     Dim files As Collection
     Dim fso As Object
-    Dim ts As Object
     Dim onePath As String
     Dim cellPairs As Variant
     Dim resultData() As Variant
     Dim i As Long
+    Dim inputLines As Collection
 
     cellPairs = Array( _
         Array("AW24", "BA25", "B22", "月曜日"), _
@@ -98,12 +98,11 @@ Public Sub CheckXlsxFiles_FromList(ByVal listFilePath As String, ByVal outputCsv
 
     If Not fso.FileExists(listFilePath) Then Exit Sub
 
-    Set ts = fso.OpenTextFile(listFilePath, 1)
-    Do While Not ts.AtEndOfStream
-        onePath = Trim$(ts.ReadLine)
+    Set inputLines = ReadTextFileLines(listFilePath)
+    For i = 1 To inputLines.Count
+        onePath = Trim$(CStr(inputLines(i)))
         If LenB(onePath) > 0 Then files.Add onePath
-    Loop
-    ts.Close
+    Next i
 
     If files.Count = 0 Then Exit Sub
 
@@ -113,14 +112,69 @@ Public Sub CheckXlsxFiles_FromList(ByVal listFilePath As String, ByVal outputCsv
         EvaluateFile CStr(files(i)), cellPairs, resultData(i, 2), resultData(i, 3)
     Next i
 
-    Set ts = fso.CreateTextFile(outputCsvPath, True)
-    For i = 1 To UBound(resultData, 1)
-        ts.WriteLine CsvEscape(CStr(resultData(i, 1))) & "," & _
-                     CsvEscape(CStr(resultData(i, 2))) & "," & _
-                     CsvEscape(CStr(resultData(i, 3)))
-    Next i
-    ts.Close
+    WriteCsvUtf8 outputCsvPath, resultData
 End Sub
+
+Private Sub WriteCsvUtf8(ByVal outputCsvPath As String, ByRef resultData() As Variant)
+    Dim stm As Object
+    Dim i As Long
+    Dim csvContent As String
+
+    For i = 1 To UBound(resultData, 1)
+        csvContent = csvContent & CsvEscape(CStr(resultData(i, 1))) & "," & _
+                                CsvEscape(CStr(resultData(i, 2))) & "," & _
+                                CsvEscape(CStr(resultData(i, 3))) & vbCrLf
+    Next i
+
+    Set stm = CreateObject("ADODB.Stream")
+    stm.Type = 2
+    stm.Charset = "utf-8"
+    stm.Open
+    stm.WriteText csvContent
+    stm.SaveToFile outputCsvPath, 2
+    stm.Close
+End Sub
+
+Private Function ReadTextFileLines(ByVal filePath As String) As Collection
+    Dim lines As Collection
+    Dim textContent As String
+    Dim normalized As String
+    Dim arr As Variant
+    Dim i As Long
+
+    Set lines = New Collection
+    textContent = ReadTextWithCharset(filePath, "utf-8")
+
+    If ContainsReplacementChar(textContent) Then
+        textContent = ReadTextWithCharset(filePath, "shift-jis")
+    End If
+
+    normalized = Replace(textContent, vbCrLf, vbLf)
+    normalized = Replace(normalized, vbCr, vbLf)
+    arr = Split(normalized, vbLf)
+
+    For i = LBound(arr) To UBound(arr)
+        lines.Add CStr(arr(i))
+    Next i
+
+    Set ReadTextFileLines = lines
+End Function
+
+Private Function ReadTextWithCharset(ByVal filePath As String, ByVal charsetName As String) As String
+    Dim stm As Object
+
+    Set stm = CreateObject("ADODB.Stream")
+    stm.Type = 2
+    stm.Charset = charsetName
+    stm.Open
+    stm.LoadFromFile filePath
+    ReadTextWithCharset = stm.ReadText(-1)
+    stm.Close
+End Function
+
+Private Function ContainsReplacementChar(ByVal s As String) As Boolean
+    ContainsReplacementChar = (InStr(1, s, ChrW$(&HFFFD), vbBinaryCompare) > 0)
+End Function
 
 Private Sub EvaluateFile(ByVal filePath As String, ByVal cellPairs As Variant, ByRef resultStatus As Variant, ByRef resultMessage As Variant)
     Dim wb As Workbook, ws As Worksheet
@@ -190,7 +244,7 @@ Private Sub EvaluateFile(ByVal filePath As String, ByVal cellPairs As Variant, B
 End Sub
 
 Private Function CsvEscape(ByVal s As String) As String
-    CsvEscape = """" & Replace(s, """", """") & """"
+    CsvEscape = """" & Replace(s, """", """""") & """"
 End Function
 
 Private Function ToLongOrZero(ByVal v As Variant) As Long
