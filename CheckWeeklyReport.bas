@@ -7,7 +7,7 @@ Sub CheckAllXlsxFiles_MultiPairs()
     Dim wsOut As Worksheet
     Dim nextRow As Long
 
-    ' 定义要对比的单元格对（左边和右边一一对应）
+    ' 比較対象のセルペアを定義（左側と右側を1対1で対応）
     Dim cellPairs As Variant
     cellPairs = Array( _
         Array("AW24", "BA25", "B22", "月曜日"), _
@@ -28,7 +28,7 @@ Sub CheckAllXlsxFiles_MultiPairs()
     GetAllXlsxFiles folderPath, fileList
 
     If fileList.Count = 0 Then
-        MsgBox "未找到xlsx文件", vbExclamation
+        MsgBox "xlsxファイルが見つかりませんでした", vbExclamation
         Exit Sub
     End If
 
@@ -54,6 +54,7 @@ Sub CheckAllXlsxFiles_MultiPairs()
 
     On Error GoTo SafeExit
 
+    ' 各xlsxファイルを順番に検査
     r = 1
     For Each filePath In fileList
         Set wb = Nothing
@@ -70,18 +71,21 @@ Sub CheckAllXlsxFiles_MultiPairs()
             minuteForCompare = 0
             isMinuteChange = False
 
+            ' 定義済みのセルペアごとに値を比較
             For i = LBound(cellPairs) To UBound(cellPairs)
                 v1 = ToLongOrZero(ws.Range(cellPairs(i)(0)).Value2)
                 v2 = Round(ToDoubleOrZero(ws.Range(cellPairs(i)(1)).Value2) * 24 * 60, 0)
                 v3 = ws.Range(cellPairs(i)(2)).Value2
                 v4 = cellPairs(i)(3)
 
+                ' 勤務時間（分換算）に差異があるか判定
                 If v1 <> v2 Then
                     allOK = False
                     diffInfo = diffInfo & cellPairs(i)(0) & "=" & v1 & "；" & _
                                            cellPairs(i)(1) & "=" & v2 & "；"
                 End If
 
+                ' 平日が休みの場合、備考セルに必要文言があるか確認
                 If i < 5 And v1 = 0 And IsEmpty(v3) Then
                     allOK = False
                     diffInfo = diffInfo & v4 & "が休みの場合、" & cellPairs(i)(2) & _
@@ -89,6 +93,7 @@ Sub CheckAllXlsxFiles_MultiPairs()
                     Exit For
                 End If
 
+                ' 日ごとの作業時間が変化しているかを確認
                 If minuteForCompare <> 0 And v2 <> 0 And minuteForCompare <> v2 Then
                     isMinuteChange = True
                 End If
@@ -99,6 +104,7 @@ Sub CheckAllXlsxFiles_MultiPairs()
             Next i
 
             resultData(r, 1) = filePath
+            ' ファイル単位の判定結果を作成
             If allOK Then
                 If Not isMinuteChange Then
                     resultData(r, 2) = "Warning"
@@ -135,7 +141,7 @@ SafeExit:
     Application.ScreenUpdating = True
 
     If Err.Number <> 0 Then
-        MsgBox "执行异常: " & Err.Description, vbExclamation
+        MsgBox "実行時エラー: " & Err.Description, vbExclamation
     Else
         MsgBox "チェック完了", vbInformation
     End If
@@ -157,19 +163,21 @@ Private Function ToDoubleOrZero(ByVal v As Variant) As Double
     End If
 End Function
 
-'=== 递归取所有xlsx文件 ===
+'=== すべてのxlsxファイルを再帰的に取得 ===
 Sub GetAllXlsxFiles(ByVal folderPath As String, ByRef fileList As Collection)
     Dim fileName As String
     Dim subFolder As String
 
     If Right$(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
 
+    ' 現在フォルダ内のxlsxファイルを取得
     fileName = Dir$(folderPath & "*.xlsx", vbNormal)
     Do While LenB(fileName) > 0
         fileList.Add folderPath & fileName
         fileName = Dir$()
     Loop
 
+    ' サブフォルダを走査して再帰的に収集
     subFolder = Dir$(folderPath & "*", vbDirectory)
     Do While LenB(subFolder) > 0
         If subFolder <> "." And subFolder <> ".." Then
