@@ -165,26 +165,28 @@ End Function
 
 '=== すべてのxlsxファイルを再帰的に取得 ===
 Sub GetAllXlsxFiles(ByVal folderPath As String, ByRef fileList As Collection)
-    Dim fileName As String
-    Dim subFolder As String
+    Dim fso As Object
+    Dim rootFolder As Object
 
-    If Right$(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+    Set fso = CreateObject("Scripting.FileSystemObject")
 
-    ' 現在フォルダ内のxlsxファイルを取得
-    fileName = Dir$(folderPath & "*.xlsx", vbNormal)
-    Do While LenB(fileName) > 0
-        fileList.Add folderPath & fileName
-        fileName = Dir$()
-    Loop
+    If Not fso.FolderExists(folderPath) Then Exit Sub
 
-    ' サブフォルダを走査して再帰的に収集
-    subFolder = Dir$(folderPath & "*", vbDirectory)
-    Do While LenB(subFolder) > 0
-        If subFolder <> "." And subFolder <> ".." Then
-            If (GetAttr(folderPath & subFolder) And vbDirectory) = vbDirectory Then
-                GetAllXlsxFiles folderPath & subFolder, fileList
-            End If
+    Set rootFolder = fso.GetFolder(folderPath)
+    CollectXlsxFiles rootFolder, fileList
+End Sub
+
+Private Sub CollectXlsxFiles(ByVal currentFolder As Object, ByRef fileList As Collection)
+    Dim f As Object
+    Dim subFolder As Object
+
+    For Each f In currentFolder.Files
+        If LCase$(Right$(f.Name, 5)) = ".xlsx" Then
+            fileList.Add f.Path
         End If
-        subFolder = Dir$()
-    Loop
+    Next f
+
+    For Each subFolder In currentFolder.SubFolders
+        CollectXlsxFiles subFolder, fileList
+    Next subFolder
 End Sub
